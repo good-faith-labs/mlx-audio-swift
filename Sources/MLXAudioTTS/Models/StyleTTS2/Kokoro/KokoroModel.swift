@@ -176,25 +176,26 @@ public final class KokoroModel: Module, SpeechGenerationModel, @unchecked Sendab
         language: String?,
         generationParameters: GenerateParameters
     ) -> AsyncThrowingStream<AudioGeneration, Error> {
-        AsyncThrowingStream { continuation in
-            Task { @Sendable [weak self] in
-                guard let self else {
-                    continuation.finish(throwing: AudioGenerationError.modelNotInitialized("Model deallocated"))
-                    return
-                }
-                do {
-                    let audio = try await self.generate(
-                        text: text, voice: voice, refAudio: refAudio,
-                        refText: refText, language: language,
-                        generationParameters: generationParameters
-                    )
-                    continuation.yield(.audio(audio))
-                    continuation.finish()
-                } catch {
-                    continuation.finish(throwing: error)
-                }
+        let (stream, continuation) = AsyncThrowingStream<AudioGeneration, Error>.makeStream()
+        let task = Task { @Sendable [weak self] in
+            guard let self else {
+                continuation.finish(throwing: AudioGenerationError.modelNotInitialized("Model deallocated"))
+                return
+            }
+            do {
+                let audio = try await self.generate(
+                    text: text, voice: voice, refAudio: refAudio,
+                    refText: refText, language: language,
+                    generationParameters: generationParameters
+                )
+                continuation.yield(.audio(audio))
+                continuation.finish()
+            } catch {
+                continuation.finish(throwing: error)
             }
         }
+        continuation.onTermination = { @Sendable _ in task.cancel() }
+        return stream
     }
 
     // MARK: - Voice Loading

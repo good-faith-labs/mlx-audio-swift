@@ -588,7 +588,7 @@ public final class FishSpeechModel: Module, SpeechGenerationModel, @unchecked Se
         _ = streamingInterval
 
         let (stream, continuation) = AsyncThrowingStream<AudioGeneration, Error>.makeStream()
-        Task { @Sendable [weak self] in
+        let task = Task { @Sendable [weak self] in
             guard let self else {
                 continuation.finish()
                 return
@@ -626,6 +626,7 @@ public final class FishSpeechModel: Module, SpeechGenerationModel, @unchecked Se
                 continuation.finish(throwing: error)
             }
         }
+        continuation.onTermination = { @Sendable _ in task.cancel() }
         return stream
     }
 
@@ -810,6 +811,7 @@ public final class FishSpeechModel: Module, SpeechGenerationModel, @unchecked Se
         generatedSteps.reserveCapacity(semanticBudget)
 
         for _ in 0 ..< semanticBudget {
+            if Task.isCancelled { break }
             let semanticToken = try sampleSemantic(
                 logits: logits,
                 previousSemanticTokens: previousSemanticTokens,

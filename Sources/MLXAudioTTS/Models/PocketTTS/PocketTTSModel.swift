@@ -248,6 +248,7 @@ public final class PocketTTSModel: Module, SpeechGenerationModel, @unchecked Sen
         var eosStep: Int?
 
         for step in 0 ..< maxGenLen {
+            if Task.isCancelled { break }
             let (nextLatent, isEos) = runFlowLMAndIncrementStep(&state, backboneInputLatents: backboneInput)
             if eosStep == nil {
                 let eos = isEos.asArray(Bool.self).first ?? false
@@ -310,7 +311,7 @@ public final class PocketTTSModel: Module, SpeechGenerationModel, @unchecked Sen
     ) -> AsyncThrowingStream<AudioGeneration, Error> {
         let (stream, continuation) = AsyncThrowingStream<AudioGeneration, Error>.makeStream()
 
-        Task { @Sendable [weak self] in
+        let task = Task { @Sendable [weak self] in
             guard let self else { return }
             do {
                 let audio = try await self.generate(
@@ -327,6 +328,7 @@ public final class PocketTTSModel: Module, SpeechGenerationModel, @unchecked Sen
                 continuation.finish(throwing: error)
             }
         }
+        continuation.onTermination = { @Sendable _ in task.cancel() }
 
         return stream
     }

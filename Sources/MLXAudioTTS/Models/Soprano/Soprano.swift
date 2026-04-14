@@ -698,9 +698,9 @@ public class SopranoModel: Module, KVCacheDimensionProvider, SpeechGenerationMod
         )
     ) -> AsyncThrowingStream<SopranoGeneration, Error> {
         let (stream, continuation) = AsyncThrowingStream<SopranoGeneration, Error>.makeStream()
-        Task { @Sendable [weak self, continuation] in
+        let task = Task { @Sendable [weak self, continuation] in
             guard let self else { return }
-            
+
             do {
                 guard self.tokenizer != nil else {
                     throw SopranoError.modelNotInitialized("Tokenizer not loaded")
@@ -785,6 +785,7 @@ public class SopranoModel: Module, KVCacheDimensionProvider, SpeechGenerationMod
                 continuation.finish(throwing: error)
             }
         }
+        continuation.onTermination = { @Sendable _ in task.cancel() }
         return stream
     }
 
@@ -825,6 +826,7 @@ public class SopranoModel: Module, KVCacheDimensionProvider, SpeechGenerationMod
                 var currentLogits = logits
 
                 for _ in 0..<maxTokens {
+                    if Task.isCancelled { break }
                     // Get last logits
                     var lastLogits = currentLogits[0..., -1, 0...]
                     eval(lastLogits)
