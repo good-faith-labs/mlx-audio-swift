@@ -22,32 +22,57 @@ enum KokoroJoinTimestamps {
         }
 
         var phonemeCursor = 1
-        var framesElapsed: Int64 = 0
-        for i in 0..<phonemeCursor {
-            framesElapsed += Int64(predDur[i])
-        }
+        var leftHalfFrames = Int64(2 * max(0, Int(predDur[0]) - 3))
+        var rightHalfFrames = leftHalfFrames
         let timedTokens = tokens.map { MToken(copying: $0) }
 
         for token in timedTokens {
-            let modelUnitCount = ((token.phonemes ?? "") + token.whitespace).utf16.count
-            let upper = phonemeCursor + modelUnitCount
+            let phonemeCount = (token.phonemes ?? "").utf16.count
+            let hasWhitespace = !token.whitespace.isEmpty
+            if phonemeCount == 0 {
+                if hasWhitespace {
+                    guard phonemeCursor < predDur.count else {
+                        throw KokoroTimingError.phonemeCountMismatch(
+                            cursor: phonemeCursor,
+                            count: 1,
+                            predDurLength: predDur.count
+                        )
+                    }
+                    let spaceHalfFrames = Int64(predDur[phonemeCursor])
+                    leftHalfFrames = rightHalfFrames + spaceHalfFrames
+                    token.start_ts = Double(leftHalfFrames) * secondsPerFrame
+                    token.end_ts = token.start_ts
+                    rightHalfFrames = leftHalfFrames + spaceHalfFrames
+                    phonemeCursor += 1
+                } else {
+                    token.start_ts = Double(leftHalfFrames) * secondsPerFrame
+                    token.end_ts = token.start_ts
+                }
+                continue
+            }
+
+            let phonemeUpper = phonemeCursor + phonemeCount
+            let upper = phonemeUpper + (hasWhitespace ? 1 : 0)
             guard upper <= predDur.count else {
                 throw KokoroTimingError.phonemeCountMismatch(
                     cursor: phonemeCursor,
-                    count: modelUnitCount,
+                    count: phonemeCount + (hasWhitespace ? 1 : 0),
                     predDurLength: predDur.count
                 )
             }
 
-            var tokenFrames: Int64 = 0
-            for i in phonemeCursor..<upper {
-                tokenFrames += Int64(predDur[i])
+            token.start_ts = Double(leftHalfFrames) * secondsPerFrame
+
+            var tokenDurationFrames: Int64 = 0
+            for i in phonemeCursor..<phonemeUpper {
+                tokenDurationFrames += Int64(predDur[i])
             }
+            let spaceHalfFrames = hasWhitespace ? Int64(predDur[phonemeUpper]) : 0
 
-            token.start_ts = Double(framesElapsed) * secondsPerFrame
-            token.end_ts = Double(framesElapsed + tokenFrames) * secondsPerFrame
+            leftHalfFrames = rightHalfFrames + (2 * tokenDurationFrames) + spaceHalfFrames
+            token.end_ts = Double(leftHalfFrames) * secondsPerFrame
+            rightHalfFrames = leftHalfFrames + spaceHalfFrames
 
-            framesElapsed += tokenFrames
             phonemeCursor = upper
         }
 
