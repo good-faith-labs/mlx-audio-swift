@@ -21,8 +21,8 @@ final class KokoroJoinTimestampsTests: XCTestCase {
         )
 
         XCTAssertEqual(result.count, 1)
-        XCTAssertEqual(result[0].start_ts ?? -1, 0.0, accuracy: 1e-9)
-        XCTAssertEqual(result[0].end_ts ?? -1, 0.400, accuracy: 1e-9)
+        XCTAssertEqual(result[0].start_ts ?? -1, 0.050, accuracy: 1e-9)
+        XCTAssertEqual(result[0].end_ts ?? -1, 0.450, accuracy: 1e-9)
         XCTAssertNil(token.start_ts)
         XCTAssertNil(token.end_ts)
     }
@@ -49,10 +49,10 @@ final class KokoroJoinTimestampsTests: XCTestCase {
             secondsPerFrame: secondsPerFrame
         )
 
-        XCTAssertEqual(result[0].start_ts!, 0.0, accuracy: 1e-9)
-        XCTAssertEqual(result[0].end_ts!, 0.150, accuracy: 1e-9)
-        XCTAssertEqual(result[1].start_ts!, 0.150, accuracy: 1e-9)
-        XCTAssertEqual(result[1].end_ts!, 0.500, accuracy: 1e-9)
+        XCTAssertEqual(result[0].start_ts!, 0.050, accuracy: 1e-9)
+        XCTAssertEqual(result[0].end_ts!, 0.200, accuracy: 1e-9)
+        XCTAssertEqual(result[1].start_ts!, 0.200, accuracy: 1e-9)
+        XCTAssertEqual(result[1].end_ts!, 0.550, accuracy: 1e-9)
         assertTimingInvariants(result)
     }
 
@@ -68,9 +68,9 @@ final class KokoroJoinTimestampsTests: XCTestCase {
             secondsPerFrame: secondsPerFrame
         )
 
-        XCTAssertEqual(result[0].end_ts!, 0.400, accuracy: 1e-9)
-        XCTAssertEqual(result[1].start_ts!, 0.400, accuracy: 1e-9)
-        XCTAssertEqual(result[1].end_ts!, 0.450, accuracy: 1e-9)
+        XCTAssertEqual(result[0].end_ts!, 0.450, accuracy: 1e-9)
+        XCTAssertEqual(result[1].start_ts!, 0.450, accuracy: 1e-9)
+        XCTAssertEqual(result[1].end_ts!, 0.500, accuracy: 1e-9)
     }
 
     func testMergedContractionGetsSingleSpan() throws {
@@ -86,8 +86,8 @@ final class KokoroJoinTimestampsTests: XCTestCase {
             tokens: [token],
             secondsPerFrame: secondsPerFrame
         )
-        XCTAssertEqual(result[0].start_ts!, 0.0, accuracy: 1e-9)
-        XCTAssertEqual(result[0].end_ts!, Double(4 + 5 + 3 + 4 + 3) * secondsPerFrame, accuracy: 1e-9)
+        XCTAssertEqual(result[0].start_ts!, 0.050, accuracy: 1e-9)
+        XCTAssertEqual(result[0].end_ts!, Double(2 + 4 + 5 + 3 + 4 + 3) * secondsPerFrame, accuracy: 1e-9)
     }
 
     func testCursorOverrunThrows() {
@@ -140,9 +140,9 @@ final class KokoroJoinTimestampsTests: XCTestCase {
             secondsPerFrame: secondsPerFrame
         )
 
-        XCTAssertEqual(result[0].end_ts!, 0.125, accuracy: 1e-9)
-        XCTAssertEqual(result[1].start_ts!, 0.125, accuracy: 1e-9)
-        XCTAssertEqual(result[1].end_ts!, 0.125, accuracy: 1e-9)
+        XCTAssertEqual(result[0].end_ts!, 0.175, accuracy: 1e-9)
+        XCTAssertEqual(result[1].start_ts!, 0.175, accuracy: 1e-9)
+        XCTAssertEqual(result[1].end_ts!, 0.175, accuracy: 1e-9)
     }
 
     func testTokenCannotConsumeEOSPadding() {
@@ -227,7 +227,8 @@ final class KokoroJoinTimestampsTests: XCTestCase {
             tokens: [token],
             secondsPerFrame: secondsPerFrame
         )
-        XCTAssertEqual(result[0].end_ts!, 510 * secondsPerFrame, accuracy: 1e-9)
+        XCTAssertEqual(result[0].start_ts!, secondsPerFrame, accuracy: 1e-9)
+        XCTAssertEqual(result[0].end_ts!, 511 * secondsPerFrame, accuracy: 1e-9)
     }
 
     func testRunMaterializingReturnsTokensWithUtf16Offsets() throws {

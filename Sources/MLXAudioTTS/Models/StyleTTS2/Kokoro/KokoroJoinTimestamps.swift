@@ -23,6 +23,9 @@ enum KokoroJoinTimestamps {
 
         var phonemeCursor = 1
         var framesElapsed: Int64 = 0
+        for i in 0..<phonemeCursor {
+            framesElapsed += Int64(predDur[i])
+        }
         let timedTokens = tokens.map { MToken(copying: $0) }
 
         for token in timedTokens {
