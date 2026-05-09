@@ -309,17 +309,30 @@ final class EnglishG2P {
     return result
   }
   
-  func subtokenize(word: String) -> [String] {
+  func subtokenize(word: String) -> [(text: String, utf16Range: Range<Int>)] {
     let nsString = word as NSString
     let range = NSRange(location: 0, length: nsString.length)
     let matches = EnglishG2P.subtokenizeRegex.matches(in: word, options: [], range: range)
     
     return matches.map { match in
-      nsString.substring(with: match.range)
+      let lower = match.range.location
+      let upper = match.range.location + match.range.length
+      return (nsString.substring(with: match.range), lower..<upper)
     }
   }
+
+  private func sourceRange(
+    for partRange: Range<Int>,
+    in token: MToken,
+    sourceText: String
+  ) -> Range<String.Index> {
+    let tokenLower = token.tokenRange.lowerBound.utf16Offset(in: sourceText)
+    let lower = String.Index(utf16Offset: tokenLower + partRange.lowerBound, in: sourceText)
+    let upper = String.Index(utf16Offset: tokenLower + partRange.upperBound, in: sourceText)
+    return lower..<upper
+  }
   
-  func retokenize(_ tokens: [MToken]) -> [Any] {
+  func retokenize(_ tokens: [MToken], sourceText: String) -> [Any] {
     var words: [Any] = []
     var currency: String? = nil
     
@@ -330,7 +343,8 @@ final class EnglishG2P {
         let parts = subtokenize(word: token.text)
         subtokens = parts.map { part in
           let t = MToken(copying: token)
-          t.text = part
+          t.text = part.text
+          t.tokenRange = sourceRange(for: part.utf16Range, in: token, sourceText: sourceText)
           t.whitespace = ""
           t.`_`.is_head = true
           t.`_`.prespace = false
@@ -407,7 +421,7 @@ final class EnglishG2P {
     var tokens = tokenize(preprocessedText: pre)
     tokens = foldLeft(tokens)
     
-    let words = retokenize(tokens)
+    let words = retokenize(tokens, sourceText: pre.text)
     
     var ctx = TokenContext()
     for i in stride(from: words.count - 1, through: 0, by: -1) {

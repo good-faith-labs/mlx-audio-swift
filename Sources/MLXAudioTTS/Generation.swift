@@ -69,6 +69,17 @@ public protocol SpeechGenerationModel: AnyObject {
     ) -> AsyncThrowingStream<AudioGeneration, Error>
 }
 
+public protocol TimedSpeechGenerationModel: SpeechGenerationModel {
+    func generateWithTimings(
+        text: String,
+        voice: String?,
+        refAudio: MLXArray?,
+        refText: String?,
+        language: String?,
+        generationParameters: GenerateParameters
+    ) async throws -> KokoroTimedGeneration
+}
+
 public extension SpeechGenerationModel {
     func generate(
         text: String,

@@ -92,6 +92,17 @@ public final class KokoroMultilingualProcessor: TextProcessor, @unchecked Sendab
         return phonemize(text: text, lexicon: lexicon)
     }
 
+    func phonemizeEnglishForTimings(
+        text: String,
+        language: String?
+    ) throws -> (phonemized: String, tokens: [MToken], timingSeeds: [KokoroTimingSeed]) {
+        let lang = language?.lowercased() ?? "en-us"
+        guard Self.englishCodes.contains(lang) || lang.hasPrefix("en") else {
+            throw KokoroTimingError.nonEnglishTimingRequested(lang)
+        }
+        return try getEnglishProcessor().phonemizeForTimings(text: text, language: language)
+    }
+
     // MARK: - Lexicon Loading
 
     private func loadLexicon(for lang: String) throws -> [String: String] {

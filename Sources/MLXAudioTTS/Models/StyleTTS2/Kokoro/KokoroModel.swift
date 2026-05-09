@@ -111,6 +111,75 @@ public final class KokoroModel: Module, SpeechGenerationModel, @unchecked Sendab
         return (audio[0], predDur)
     }
 
+    struct PredDurDefenseStats: Sendable, Equatable {
+        let nanReplacements: Int
+        let clippedDurations: Int
+
+        static let clean = PredDurDefenseStats(nanReplacements: 0, clippedDurations: 0)
+    }
+
+    func callAsFunctionWithStats(
+        inputIds: MLXArray, refS: MLXArray, speed: Float = 1.0
+    ) -> (audio: MLXArray, predDur: MLXArray, stats: PredDurDefenseStats) {
+        let seqLen = inputIds.shape[inputIds.ndim - 1]
+        let inputLengths = MLXArray([Int32(seqLen)])
+        var textMask = MLXArray(Array(0..<Int32(seqLen))).reshaped([1, -1])
+        textMask = (textMask + 1) .> inputLengths.reshaped([-1, 1])
+
+        let attMask = MLXArray(1) - textMask.asType(.int32)
+        let (bertOut, _) = bert(inputIds, attentionMask: attMask)
+        let dEn = bertEncoder(bertOut).transposed(0, 2, 1)
+
+        let globalStyle = refS[0..., 128...]
+        let acousticStyle = refS[0..., ..<128]
+
+        let d = predictor.textEncoder(dEn, style: globalStyle, textLengths: inputLengths, mask: textMask)
+        let (x, _) = predictor.lstm(d)
+        let duration = predictor.durationProj(x)
+
+        let maxFramesPerPhoneme = 100
+        let durRaw = MLX.sigmoid(duration).sum(axis: -1) / speed
+        let nanMask = MLX.isNaN(durRaw)
+        let nanCount = Int(nanMask.asType(.int32).sum().item(Int32.self))
+        let durSafe = nanToNum(durRaw, nan: 1.0)
+
+        let durRounded = MLX.round(durSafe)
+        let predDur = MLX.clip(durRounded, min: 1, max: Float(maxFramesPerPhoneme))
+            .asType(.int32)[0]
+        let ceilingMask = durRounded[0] .> Float(maxFramesPerPhoneme)
+        let clippedCount = Int(ceilingMask.asType(.int32).sum().item(Int32.self))
+
+        let durArray: [Int32] = predDur.asArray(Int32.self)
+        var indices = [MLXArray]()
+        for (i, n) in durArray.enumerated() {
+            let count = min(max(Int(n), 0), maxFramesPerPhoneme)
+            if count > 0 {
+                indices.append(MLX.repeated(MLXArray(Int32(i)), count: count))
+            }
+        }
+
+        let stats = PredDurDefenseStats(nanReplacements: nanCount, clippedDurations: clippedCount)
+
+        guard !indices.isEmpty else {
+            let silence = MLXArray.zeros([1, 1])
+            return (silence, predDur, stats)
+        }
+        let allIndices = MLX.concatenated(indices, axis: 0)
+
+        let predAlnTrg = MLXArray.zeros([inputIds.shape[1], allIndices.shape[0]])
+        predAlnTrg[allIndices, MLXArray(Array(0..<Int32(allIndices.shape[0])))] = MLXArray(Float(1))
+        let predAln = predAlnTrg.expandedDimensions(axis: 0)
+
+        let en = MLX.matmul(d.transposed(0, 2, 1), predAln)
+        let (f0Pred, nPred) = predictor.predict(en, globalStyle)
+
+        let tEn = textEncoder(inputIds, inputLengths: inputLengths, mask: textMask)
+        let asr = MLX.matmul(tEn, predAln)
+
+        let audio = decoder(asr, f0Pred, nPred, acousticStyle)
+        return (audio[0], predDur, stats)
+    }
+
     // MARK: - Tokenizer
 
     func tokenize(_ text: String) -> [Int] {

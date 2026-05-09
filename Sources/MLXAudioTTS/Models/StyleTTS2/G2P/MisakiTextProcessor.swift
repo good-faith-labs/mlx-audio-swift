@@ -29,6 +29,17 @@ public final class MisakiTextProcessor: TextProcessor, @unchecked Sendable {
         return phonemes
     }
 
+    func phonemizeForTimings(
+        text: String,
+        language: String?
+    ) throws -> (phonemized: String, tokens: [MToken], timingSeeds: [KokoroTimingSeed]) {
+        let british = language?.lowercased().contains("gb") == true
+        let g2p = try getG2P(british: british)
+        let (phonemized, tokens) = g2p.phonemize(text: text, performPreprocess: false)
+        let timingSeeds = try KokoroTimingSeed.makeAll(from: tokens, originalText: text)
+        return (phonemized, tokens, timingSeeds)
+    }
+
     private func getG2P(british: Bool) throws -> EnglishG2P {
         lock.lock()
         defer { lock.unlock() }
