@@ -1,7 +1,52 @@
 import Testing
 import Foundation
 @testable import MLXAudioG2P
-import MLXAudioCore
+@testable import MLXAudioCore
+
+struct ModelUtilsCacheValidationTests {
+    @Test func acceptsCachedWeightsWithoutConfigJSON() throws {
+        let modelDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: modelDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: modelDir) }
+
+        let weightsURL = modelDir.appendingPathComponent("us_bart.safetensors")
+        try Data([0x01]).write(to: weightsURL)
+        try #"{"model_type":"bart"}"#.write(
+            to: modelDir.appendingPathComponent("us_bart_config.json"),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        let result = ModelUtils.validateCachedModelDirectory(
+            at: modelDir,
+            requiredExtension: "safetensors"
+        )
+
+        #expect(result == .usable)
+    }
+
+    @Test func rejectsInvalidConfigJSONWhenPresent() throws {
+        let modelDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: modelDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: modelDir) }
+
+        try Data([0x01]).write(to: modelDir.appendingPathComponent("model.safetensors"))
+        try "not json".write(
+            to: modelDir.appendingPathComponent("config.json"),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        let result = ModelUtils.validateCachedModelDirectory(
+            at: modelDir,
+            requiredExtension: "safetensors"
+        )
+
+        #expect(result == .invalidConfig)
+    }
+}
 
 // MARK: - Unit Tests (no model required)
 

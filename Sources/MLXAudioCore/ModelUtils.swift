@@ -2,6 +2,12 @@ import Foundation
 import HuggingFace
 
 public enum ModelUtils {
+    enum CachedModelValidationResult: Equatable {
+        case usable
+        case invalidConfig
+        case incomplete
+    }
+
     public static func resolveModelType(
         repoID: Repo.ID,
         hfToken: String? = nil,
@@ -81,27 +87,17 @@ public enum ModelUtils {
 
         // Check if model already exists with required files
         if FileManager.default.fileExists(atPath: modelDir.path) {
-            let files = try? FileManager.default.contentsOfDirectory(at: modelDir, includingPropertiesForKeys: [.fileSizeKey])
-            let hasRequiredFile = files?.contains { file in
-                guard file.pathExtension == normalizedRequiredExtension else { return false }
-                let size = (try? file.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0
-                return size > 0
-            } ?? false
-
-            if hasRequiredFile {
-                // Validate that config.json is valid JSON
-                let configPath = modelDir.appendingPathComponent("config.json")
-                if FileManager.default.fileExists(atPath: configPath.path) {
-                    if let configData = try? Data(contentsOf: configPath),
-                       let _ = try? JSONSerialization.jsonObject(with: configData) {
-                        print("Using cached model at: \(modelDir.path)")
-                        return modelDir
-                    } else {
-                        print("Cached config.json is invalid, clearing cache...")
-                        Self.clearCaches(modelDir: modelDir, repoID: repoID, hubCache: cache)
-                    }
-                }
-            } else {
+            switch validateCachedModelDirectory(
+                at: modelDir,
+                requiredExtension: normalizedRequiredExtension
+            ) {
+            case .usable:
+                print("Using cached model at: \(modelDir.path)")
+                return modelDir
+            case .invalidConfig:
+                print("Cached config.json is invalid, clearing cache...")
+                Self.clearCaches(modelDir: modelDir, repoID: repoID, hubCache: cache)
+            case .incomplete:
                 print("Cached model appears incomplete, clearing cache...")
                 Self.clearCaches(modelDir: modelDir, repoID: repoID, hubCache: cache)
             }
@@ -148,6 +144,37 @@ public enum ModelUtils {
 
         print("Model downloaded to: \(modelDir.path)")
         return modelDir
+    }
+
+    static func validateCachedModelDirectory(
+        at modelDir: URL,
+        requiredExtension: String
+    ) -> CachedModelValidationResult {
+        let files = try? FileManager.default.contentsOfDirectory(
+            at: modelDir,
+            includingPropertiesForKeys: [.fileSizeKey]
+        )
+        let hasRequiredFile = files?.contains { file in
+            guard file.pathExtension == requiredExtension else { return false }
+            let size = (try? file.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0
+            return size > 0
+        } ?? false
+
+        guard hasRequiredFile else {
+            return .incomplete
+        }
+
+        let configPath = modelDir.appendingPathComponent("config.json")
+        guard FileManager.default.fileExists(atPath: configPath.path) else {
+            return .usable
+        }
+
+        guard let configData = try? Data(contentsOf: configPath),
+              let _ = try? JSONSerialization.jsonObject(with: configData) else {
+            return .invalidConfig
+        }
+
+        return .usable
     }
 
     private static func clearCaches(modelDir: URL, repoID: Repo.ID, hubCache: HubCache) {
